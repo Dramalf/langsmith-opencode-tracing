@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.ref/
+*.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.env
+.env.*
+.opencode/langsmith.env
+.opencode/.env
