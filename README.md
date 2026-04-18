@@ -101,7 +101,31 @@ set `TRACE_TO_LANGSMITH=true` and `OC_LANGSMITH_API_KEY`.
 \* Tracing is disabled unless one of the `*_TRACING` vars is truthy.
 \*\* Required unless `OC_LANGSMITH_RUNS_ENDPOINTS` is supplied.
 
-### Example — shell profile
+### Option 1 — project-local `.opencode/langsmith.env` (recommended)
+
+The plugin auto-loads a `.opencode/langsmith.env` file from the project
+directory at startup and injects its contents into `process.env` (without
+overriding variables already set in your shell). Create one per project:
+
+```bash
+mkdir -p .opencode
+cat > .opencode/langsmith.env <<'EOF'
+LANGSMITH_TRACING=true
+OC_LANGSMITH_API_KEY=lsv2_pt_...
+OC_LANGSMITH_PROJECT=my-opencode
+EOF
+echo '.opencode/langsmith.env' >> .gitignore   # don't commit your API key
+```
+
+The same file format and key naming is intentionally compatible with
+`langsmith-claude-code-plugins`, so you can share one env file between
+opencode and Claude Code.
+
+You can override the search path with `OC_LANGSMITH_ENV_FILE=/abs/path`.
+
+### Option 2 — shell profile
+
+Add to your `~/.zshrc` / `~/.bashrc`:
 
 ```bash
 export TRACE_TO_LANGSMITH="true"
@@ -109,10 +133,12 @@ export OC_LANGSMITH_API_KEY="lsv2_pt_..."
 export OC_LANGSMITH_PROJECT="my-opencode"
 ```
 
-### Example — opencode config
+Shell-exported variables take precedence over anything in the env file.
 
-opencode does not currently inject env vars from its config, so use your
-shell profile / `direnv` / process manager to set them.
+### Note on `opencode.json`
+
+opencode does not currently support an `env` field in `opencode.json`
+(unlike Claude Code's `settings.json`). Use one of the two options above.
 
 ### Nesting under an existing LangSmith run
 
