@@ -1,5 +1,7 @@
 # LangSmith Tracing Plugin for opencode
 
+[![npm version](https://img.shields.io/npm/v/opencode-langsmith-tracing.svg?logo=npm&logoColor=white)](https://www.npmjs.com/package/opencode-langsmith-tracing)
+[![npm downloads](https://img.shields.io/npm/dm/opencode-langsmith-tracing.svg?logo=npm&logoColor=white)](https://www.npmjs.com/package/opencode-langsmith-tracing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](./tsconfig.json)
 [![Node >=20](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white)](./package.json)
@@ -40,45 +42,44 @@ LangSmith rather than hanging open.
 
 ## Installation
 
-### As a global opencode plugin
+### From npm (recommended)
 
-1. Publish or install this package (either from npm or from a local
-   checkout). From a local clone:
+Add the plugin to your opencode configuration (`opencode.json` at the
+project root, or `~/.config/opencode/opencode.json` globally):
 
-   ```bash
-   cd opencode-langsmith-tracing
-   npm install
-   npm run build
-   npm link
-   ```
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-langsmith-tracing"]
+}
+```
 
-2. Add the plugin to your opencode configuration (`opencode.json` at the
-   project root, or `~/.config/opencode/opencode.json` globally):
+opencode will install it from npm at startup; no manual `npm install`
+needed.
 
-   ```json
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "plugin": ["opencode-langsmith-tracing"]
-   }
-   ```
+### From a local clone (development)
 
-   For locally-checked-out plugins, opencode also loads any file under
-   `.opencode/plugins/` or `~/.config/opencode/plugins/`. A thin shim
-   such as the following is enough:
+```bash
+git clone https://github.com/Dramalf/opencode-langsmith-tracing.git
+cd opencode-langsmith-tracing
+npm install
+npm run build
+```
 
-   ```ts
-   // ~/.config/opencode/plugins/langsmith.ts
-   export { LangsmithTracingPlugin as default } from "opencode-langsmith-tracing";
-   ```
-
-### From a monorepo / single-file drop-in
-
-If you'd rather not publish the package, copy the bundled `dist/` output
-into `~/.config/opencode/plugins/` and re-export:
+Then create a thin loader inside your opencode config directory so the
+built `dist/` is picked up:
 
 ```ts
 // ~/.config/opencode/plugins/langsmith.ts
-export { default } from "./dist/index.js";
+export { default } from "/absolute/path/to/opencode-langsmith-tracing/dist/index.js";
+```
+
+Or, if you've published your local fork to npm under a different name,
+re-export it:
+
+```ts
+// ~/.config/opencode/plugins/langsmith.ts
+export { LangsmithTracingPlugin as default } from "opencode-langsmith-tracing";
 ```
 
 ## Configuration
