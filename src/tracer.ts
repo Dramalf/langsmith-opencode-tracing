@@ -463,30 +463,39 @@ function ensureToolRun(
   fallbackStart: number,
 ): ToolRunState {
   let t = turn.tools.get(part.callID);
-  if (t) return t;
+  if (!t) {
+    const runId = uuid7();
+    const startMs =
+      (part.state.status === "running" || part.state.status === "completed" || part.state.status === "error")
+        ? part.state.time.start
+        : fallbackStart;
+    const startIso = toIso(startMs);
+    const segment = generateDottedOrderSegment(startIso, runId);
+    const dottedOrder = `${turn.dottedOrder}.${segment}`;
 
-  const runId = uuid7();
-  const startMs =
-    (part.state.status === "running" || part.state.status === "completed" || part.state.status === "error")
-      ? part.state.time.start
-      : fallbackStart;
-  const startIso = toIso(startMs);
-  const segment = generateDottedOrderSegment(startIso, runId);
-  const dottedOrder = `${turn.dottedOrder}.${segment}`;
+    t = {
+      runId,
+      dottedOrder,
+      callID: part.callID,
+      toolName: part.tool,
+      startTime: startIso,
+      assistantMessageID: part.messageID,
+      input: part.state.input ?? {},
+      posted: false,
+      closed: false,
+    };
+    turn.tools.set(part.callID, t);
+  } else {
+    // `handleToolBefore` may have pre-created the run (it fires before
+    // opencode emits `message.part.updated`). It does not know which
+    // assistant message this call belongs to, so attribute it now.
+    if (!t.assistantMessageID) t.assistantMessageID = part.messageID;
+    if (!t.toolName) t.toolName = part.tool;
+  }
 
-  t = {
-    runId,
-    dottedOrder,
-    callID: part.callID,
-    toolName: part.tool,
-    startTime: startIso,
-    assistantMessageID: part.messageID,
-    input: part.state.input ?? {},
-    posted: false,
-    closed: false,
-  };
-  turn.tools.set(part.callID, t);
-
+  // Always (re-)attach to the owning assistant's toolCallIds so the
+  // call surfaces in the assistant run's output even when the tool
+  // state was pre-created by `handleToolBefore`.
   const a = turn.assistants.get(part.messageID);
   if (a && !a.toolCallIds.includes(part.callID)) {
     a.toolCallIds.push(part.callID);
@@ -1101,29 +1110,62 @@ export function handleToolBefore(
   }
 }
 
-/** Final opportunity to patch in tool.execute.after outputs. */
+/** Final opportunity to patch in tool.execute.after outputs.
+ *
+ * NOTE: for MCP tools, opencode hands us the raw MCP response
+ * (`{ content: [...] }`) here — NOT the assembled `{ title, output,
+ * metadata }` shape declared on the hook. See opencode issue #21146.
+ *
+ * In that case `output.output` is `undefined`, so we must not treat
+ * this callback as the authoritative "tool finished" signal: closing
+ * the run now would record an empty output and short-circuit the
+ * later `message.part.updated(status=completed)` event which carries
+ * the real text. For MCP tools we only make sure the run is posted
+ * with whatever metadata we can and let `handleAssistantPart` close
+ * it once opencode has finished assembling the output.
+ */
 export async function handleToolAfter(
   sessionID: string,
   callID: string,
   toolName: string,
   args: Record<string, unknown>,
-  output: { title: string; output: string; metadata: unknown },
+  output: {
+    title?: string;
+    output?: string;
+    metadata?: unknown;
+    // MCP raw result shape — present only on MCP tools
+    content?: unknown;
+  },
 ): Promise<void> {
   const session = getOrCreateSession(sessionID);
   const turn = session.currentTurn;
   if (!turn) return;
   const tool = turn.tools.get(callID);
   if (!tool) return;
+
   tool.input = args ?? tool.input;
-  tool.output = output.output ?? tool.output;
-  tool.title = output.title ?? tool.title;
-  if (!tool.endTime) tool.endTime = toIso(Date.now());
+  if (!tool.toolName) tool.toolName = toolName;
+  if (typeof output.title === "string") tool.title = output.title;
   if (typeof output.metadata === "object" && output.metadata !== null) {
     tool.metadata = output.metadata as Record<string, unknown>;
   }
-  if (!tool.toolName) tool.toolName = toolName;
+
+  const hasAssembledOutput = typeof output.output === "string";
+  if (hasAssembledOutput) {
+    tool.output = output.output as string;
+    if (!tool.endTime) tool.endTime = toIso(Date.now());
+  }
+
   if (!tool.posted) await postToolStart(session, turn, tool);
-  await closeToolRun(session, turn, tool);
+
+  // Only close here for native tools that hand us the assembled
+  // `{ title, output, metadata }` shape. For MCP tools (raw result,
+  // no assembled output yet) we defer closing to the
+  // `message.part.updated(status=completed)` event so the real output
+  // makes it into the trace.
+  if (hasAssembledOutput) {
+    await closeToolRun(session, turn, tool);
+  }
 }
 
 /** Flush on command-execution or similar boundary events. */
